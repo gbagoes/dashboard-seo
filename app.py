@@ -1,4 +1,4 @@
-# version 4.1
+# version 4.1.2
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -50,12 +50,10 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             soup = BeautifulSoup(response.text, 'html.parser')
             visited.add(current_url)
             
-            # Antrekan link internal
             for link in get_internal_links(current_url, soup):
                 if link.startswith(start_url) and link not in visited and link not in queue:
                     queue.append(link)
             
-            # Abaikan jika ini URL produk Rolex (karena ini mode Page)
             if "/rolex/jam-tangan-rolex/" in current_url and len(current_url.split('/')) > 6:
                 continue
                 
@@ -63,9 +61,16 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             title = soup.find('title')
             seo_title = title.text.strip() if title else "Tidak ada Title Tag"
             
-            # 2. Ekstrak Page Title (Heading H1 yang terlihat di halaman)
-            h1_tag = soup.find('h1')
-            page_title_h1 = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
+            # 2. Ekstrak Page Title (Representasi get_the_title di frontend)
+            og_title = soup.find('meta', attrs={'property': 'og:title'})
+            wp_class_title = soup.find(class_=['product_title', 'entry-title'])
+            
+            if og_title:
+                page_title_pure = og_title.get('content', '').strip()
+            elif wp_class_title:
+                page_title_pure = wp_class_title.text.strip()
+            else:
+                page_title_pure = "Tidak ditemukan"
             
             # 3. Ekstrak Meta Description
             meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
@@ -76,10 +81,9 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
             alt_combined = " ; ".join(alts) if alts else "Kosong"
             
-            # Simpan hasil
             results.append({
                 "Type": "Page",
-                "Page Title (H1)": page_title_h1,
+                "Page Title (WP)": page_title_pure,
                 "Title Tag": seo_title,
                 "Meta Description": meta_description,
                 "Permalink": current_url,
@@ -140,9 +144,16 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                     title = soup.find('title')
                     seo_title = title.text.strip() if title else "Tidak ada Title Tag"
                     
-                    # 2. Ekstrak Page Title (Heading H1 yang terlihat di halaman)
-                    h1_tag = soup.find('h1')
-                    page_title_h1 = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
+                    # 2. Ekstrak Page Title (Representasi get_the_title di frontend)
+                    og_title = soup.find('meta', attrs={'property': 'og:title'})
+                    wp_class_title = soup.find(class_=['product_title', 'entry-title'])
+                    
+                    if og_title:
+                        page_title_pure = og_title.get('content', '').strip()
+                    elif wp_class_title:
+                        page_title_pure = wp_class_title.text.strip()
+                    else:
+                        page_title_pure = "Tidak ditemukan"
                     
                     # 3. Ekstrak Meta Description
                     meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
@@ -153,10 +164,9 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                     alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
                     alt_combined = " ; ".join(alts) if alts else "Kosong"
                     
-                    # Simpan hasil
                     results.append({
                         "Type": "Product",
-                        "Page Title (H1)": page_title_h1,
+                        "Page Title (WP)": page_title_pure,
                         "Title Tag": seo_title,
                         "Meta Description": meta_description,
                         "Permalink": current_url,
@@ -180,11 +190,10 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
 # ==========================================
 # KONFIGURASI DASHBOARD (STREAMLIT UI)
 # ==========================================
-st.set_page_config(page_title="SEO & Image Alt Scanner v4.1", layout="wide")
-st.title("🚀 Dashboard SEO & Image Alt Scanner v4.1")
-st.write("Tools audit *On-Page SEO* dengan pemisahan kolom Page Title (H1) dan Title Tag (SEO).")
+st.set_page_config(page_title="SEO & Image Alt Scanner v4.2", layout="wide")
+st.title("🚀 Dashboard SEO & Image Alt Scanner v4.2")
+st.write("Tools audit *On-Page SEO* dengan pemisahan kolom Page Title (Representasi WP) dan Title Tag (SEO).")
 
-# Pilihan Mode
 scan_mode = st.radio(
     "Pilih Metode Scanning:",
     ("Metode Crawling (Cocok untuk Halaman/Page Umum)", "Metode Sitemap XML (Akurat untuk Ratusan Produk)"),
@@ -193,12 +202,11 @@ scan_mode = st.radio(
 
 st.markdown("---")
 
-# UI Form
 with st.form("scan_form"):
     if "Sitemap" in scan_mode:
         col1, col2 = st.columns([2, 2])
         with col1:
-            sitemap_url = st.text_input("URL XML Sitemap", value="https://www.intime.co.id/product-sitemap.xml", help="Ganti dengan nama file sitemap produk Anda jika berbeda.")
+            sitemap_url = st.text_input("URL XML Sitemap", value="https://www.intime.co.id/product-sitemap.xml")
         with col2:
             target_prefix = st.text_input("Syarat Awalan URL (Prefix)", value="https://www.intime.co.id/rolex/jam-tangan-rolex/")
     else:
@@ -212,7 +220,6 @@ with st.form("scan_form"):
         
     submit_button = st.form_submit_button("Mulai Scan SEO")
 
-# Eksekusi
 if submit_button:
     with st.spinner('Sistem sedang bekerja, harap tunggu...'):
         if "Sitemap" in scan_mode:
@@ -226,10 +233,8 @@ if submit_button:
             df = pd.DataFrame(data)
             st.success(f"✅ Selesai! Berhasil mengumpulkan {len(data)} baris data.")
             
-            # Tampilkan Tabel
             st.dataframe(df, use_container_width=True)
             
-            # Export CSV standar Indonesia
             csv_data = df.to_csv(index=False, sep=';', quoting=csv.QUOTE_ALL).encode('utf-8')
             
             st.download_button(
