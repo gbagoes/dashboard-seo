@@ -1,4 +1,4 @@
-# version 4.0
+# version 4.1
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -59,20 +59,28 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             if "/rolex/jam-tangan-rolex/" in current_url and len(current_url.split('/')) > 6:
                 continue
                 
-            # Ekstrak Data
+            # 1. Ekstrak Title Tag (SEO)
             title = soup.find('title')
-            page_title = title.text.strip() if title else "Tidak ada Title"
+            seo_title = title.text.strip() if title else "Tidak ada Title Tag"
             
+            # 2. Ekstrak Page Title (Heading H1 yang terlihat di halaman)
+            h1_tag = soup.find('h1')
+            page_title_h1 = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
+            
+            # 3. Ekstrak Meta Description
             meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
             meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
             
+            # 4. Ekstrak Image Alt Tag
             images = soup.find_all('img')
             alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
             alt_combined = " ; ".join(alts) if alts else "Kosong"
             
+            # Simpan hasil
             results.append({
                 "Type": "Page",
-                "Title Tag": page_title,
+                "Page Title (H1)": page_title_h1,
+                "Title Tag": seo_title,
                 "Meta Description": meta_description,
                 "Permalink": current_url,
                 "Image Alt Tag": alt_combined
@@ -103,10 +111,7 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
             st.error(f"Gagal membaca Sitemap. Status code: {response.status_code}")
             return []
             
-        # Mengekstrak semua tag <loc> dari XML menggunakan Regex (Sangat Cepat)
         all_urls = re.findall(r'<loc>(.*?)</loc>', response.text)
-        
-        # Filter URL sesuai prefix (https://www.intime.co.id/rolex/jam-tangan-rolex/)
         target_urls = [url for url in all_urls if url.startswith(target_prefix)]
         
         if not target_urls:
@@ -115,7 +120,6 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
             
         st.success(f"Berhasil menemukan {len(target_urls)} URL produk di Sitemap! Memulai proses scan...")
         
-        # Batasi jumlah URL sesuai max_pages
         urls_to_scan = target_urls[:max_pages]
         
         progress_bar = st.progress(0)
@@ -132,19 +136,28 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                 if page_resp.status_code == 200:
                     soup = BeautifulSoup(page_resp.text, 'html.parser')
                     
+                    # 1. Ekstrak Title Tag (SEO)
                     title = soup.find('title')
-                    page_title = title.text.strip() if title else "Tidak ada Title"
+                    seo_title = title.text.strip() if title else "Tidak ada Title Tag"
                     
+                    # 2. Ekstrak Page Title (Heading H1 yang terlihat di halaman)
+                    h1_tag = soup.find('h1')
+                    page_title_h1 = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
+                    
+                    # 3. Ekstrak Meta Description
                     meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
                     meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
                     
+                    # 4. Ekstrak Image Alt Tag
                     images = soup.find_all('img')
                     alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
                     alt_combined = " ; ".join(alts) if alts else "Kosong"
                     
+                    # Simpan hasil
                     results.append({
                         "Type": "Product",
-                        "Title Tag": page_title,
+                        "Page Title (H1)": page_title_h1,
+                        "Title Tag": seo_title,
                         "Meta Description": meta_description,
                         "Permalink": current_url,
                         "Image Alt Tag": alt_combined
@@ -167,9 +180,9 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
 # ==========================================
 # KONFIGURASI DASHBOARD (STREAMLIT UI)
 # ==========================================
-st.set_page_config(page_title="SEO & Image Alt Scanner v4", layout="wide")
-st.title("🚀 Dashboard SEO & Image Alt Scanner v4.0")
-st.write("Tools audit *On-Page SEO* dengan dukungan XML Sitemap untuk akurasi pendataan produk.")
+st.set_page_config(page_title="SEO & Image Alt Scanner v4.1", layout="wide")
+st.title("🚀 Dashboard SEO & Image Alt Scanner v4.1")
+st.write("Tools audit *On-Page SEO* dengan pemisahan kolom Page Title (H1) dan Title Tag (SEO).")
 
 # Pilihan Mode
 scan_mode = st.radio(
