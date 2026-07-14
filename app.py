@@ -1,4 +1,4 @@
-# version 4.1.2
+# version 4.3
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -43,12 +43,21 @@ def crawl_pages(start_url, max_pages, delay_seconds):
         try:
             status_text.text(f"Memindai Halaman ({len(visited)+1}/{max_pages}): {current_url}")
             response = requests.get(current_url, headers=headers, timeout=10)
+            visited.add(current_url)
             
             if response.status_code != 200:
+                results.append({
+                    "Type": f"Page (Error {response.status_code})",
+                    "Page Title (WP)": "Gagal Diakses",
+                    "Title Tag": "Gagal Diakses",
+                    "Meta Description": "Gagal Diakses",
+                    "Permalink": current_url,
+                    "Image Alt Tag": "Gagal Diakses"
+                })
+                progress_bar.progress(min(int((len(visited) / max_pages) * 100), 100))
                 continue
                 
             soup = BeautifulSoup(response.text, 'html.parser')
-            visited.add(current_url)
             
             for link in get_internal_links(current_url, soup):
                 if link.startswith(start_url) and link not in visited and link not in queue:
@@ -57,11 +66,9 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             if "/rolex/jam-tangan-rolex/" in current_url and len(current_url.split('/')) > 6:
                 continue
                 
-            # 1. Ekstrak Title Tag (SEO)
             title = soup.find('title')
             seo_title = title.text.strip() if title else "Tidak ada Title Tag"
             
-            # 2. Ekstrak Page Title (Representasi get_the_title di frontend)
             og_title = soup.find('meta', attrs={'property': 'og:title'})
             wp_class_title = soup.find(class_=['product_title', 'entry-title'])
             
@@ -72,11 +79,9 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             else:
                 page_title_pure = "Tidak ditemukan"
             
-            # 3. Ekstrak Meta Description
             meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
             meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
             
-            # 4. Ekstrak Image Alt Tag
             images = soup.find_all('img')
             alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
             alt_combined = " ; ".join(alts) if alts else "Kosong"
@@ -93,7 +98,16 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             progress_bar.progress(min(int((len(visited) / max_pages) * 100), 100))
                     
         except Exception as e:
-            st.error(f"Error pada {current_url}: {e}")
+            visited.add(current_url)
+            results.append({
+                "Type": "Page (Timeout/Error)",
+                "Page Title (WP)": f"Error: {str(e)[:50]}",
+                "Title Tag": "Gagal Diakses",
+                "Meta Description": "Gagal Diakses",
+                "Permalink": current_url,
+                "Image Alt Tag": "Gagal Diakses"
+            })
+            progress_bar.progress(min(int((len(visited) / max_pages) * 100), 100))
             
     progress_bar.empty()
     status_text.empty()
@@ -137,14 +151,13 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                 status_text.text(f"Memindai Produk ({i+1}/{len(urls_to_scan)}): {current_url}")
                 page_resp = requests.get(current_url, headers=headers, timeout=10)
                 
+                # JIKA BERHASIL (200 OK)
                 if page_resp.status_code == 200:
                     soup = BeautifulSoup(page_resp.text, 'html.parser')
                     
-                    # 1. Ekstrak Title Tag (SEO)
                     title = soup.find('title')
                     seo_title = title.text.strip() if title else "Tidak ada Title Tag"
                     
-                    # 2. Ekstrak Page Title (Representasi get_the_title di frontend)
                     og_title = soup.find('meta', attrs={'property': 'og:title'})
                     wp_class_title = soup.find(class_=['product_title', 'entry-title'])
                     
@@ -155,11 +168,9 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                     else:
                         page_title_pure = "Tidak ditemukan"
                     
-                    # 3. Ekstrak Meta Description
                     meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
                     meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
                     
-                    # 4. Ekstrak Image Alt Tag
                     images = soup.find_all('img')
                     alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
                     alt_combined = " ; ".join(alts) if alts else "Kosong"
@@ -172,9 +183,28 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                         "Permalink": current_url,
                         "Image Alt Tag": alt_combined
                     })
+                
+                # JIKA STATUS CODE SELAIN 200 (Misal: 404, 301, 500)
+                else:
+                    results.append({
+                        "Type": f"Product (Error {page_resp.status_code})",
+                        "Page Title (WP)": "Gagal Diakses",
+                        "Title Tag": "Gagal Diakses",
+                        "Meta Description": "Gagal Diakses",
+                        "Permalink": current_url,
+                        "Image Alt Tag": "Gagal Diakses"
+                    })
                     
+            # JIKA TERJADI TIMEOUT ATAU ERROR KONEKSI
             except Exception as e:
-                st.error(f"Error pada produk {current_url}: {e}")
+                results.append({
+                    "Type": "Product (Timeout/Error)",
+                    "Page Title (WP)": f"Error: {str(e)[:50]}",
+                    "Title Tag": "Gagal Diakses",
+                    "Meta Description": "Gagal Diakses",
+                    "Permalink": current_url,
+                    "Image Alt Tag": "Gagal Diakses"
+                })
                 
             progress_bar.progress(min(int(((i + 1) / len(urls_to_scan)) * 100), 100))
             
@@ -190,9 +220,9 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
 # ==========================================
 # KONFIGURASI DASHBOARD (STREAMLIT UI)
 # ==========================================
-st.set_page_config(page_title="SEO & Image Alt Scanner v4.2", layout="wide")
-st.title("🚀 Dashboard SEO & Image Alt Scanner v4.2")
-st.write("Tools audit *On-Page SEO* dengan pemisahan kolom Page Title (Representasi WP) dan Title Tag (SEO).")
+st.set_page_config(page_title="SEO & Image Alt Scanner v4.3", layout="wide")
+st.title("🚀 Dashboard SEO & Image Alt Scanner v4.3")
+st.write("Tools audit *On-Page SEO* dengan fitur pencatatan URL Error (Mencegah selisih data Sitemap).")
 
 scan_mode = st.radio(
     "Pilih Metode Scanning:",
@@ -214,7 +244,7 @@ with st.form("scan_form"):
 
     col3, col4 = st.columns([2, 2])
     with col3:
-        max_pages = st.number_input("Batas Total Data/URL Diproses", min_value=1, max_value=2000, value=50)
+        max_pages = st.number_input("Batas Total Data/URL Diproses", min_value=1, max_value=2000, value=250)
     with col4:
         delay = st.number_input("Jeda per Halaman (Detik)", min_value=0.0, max_value=10.0, value=1.0, step=0.5)
         
@@ -231,7 +261,7 @@ if submit_button:
         
         if data:
             df = pd.DataFrame(data)
-            st.success(f"✅ Selesai! Berhasil mengumpulkan {len(data)} baris data.")
+            st.success(f"✅ Selesai! Berhasil memproses {len(data)} baris data.")
             
             st.dataframe(df, use_container_width=True)
             
