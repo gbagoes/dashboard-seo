@@ -1,4 +1,4 @@
-# version 4.3
+# version 4.4
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -50,6 +50,7 @@ def crawl_pages(start_url, max_pages, delay_seconds):
                     "Type": f"Page (Error {response.status_code})",
                     "Page Title (WP)": "Gagal Diakses",
                     "Title Tag": "Gagal Diakses",
+                    "H1 Tag": "Gagal Diakses",
                     "Meta Description": "Gagal Diakses",
                     "Permalink": current_url,
                     "Image Alt Tag": "Gagal Diakses"
@@ -66,9 +67,11 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             if "/rolex/jam-tangan-rolex/" in current_url and len(current_url.split('/')) > 6:
                 continue
                 
+            # Ekstrak Title Tag (SEO)
             title = soup.find('title')
             seo_title = title.text.strip() if title else "Tidak ada Title Tag"
             
+            # Ekstrak Page Title (WP Class / OG)
             og_title = soup.find('meta', attrs={'property': 'og:title'})
             wp_class_title = soup.find(class_=['product_title', 'entry-title'])
             
@@ -78,10 +81,16 @@ def crawl_pages(start_url, max_pages, delay_seconds):
                 page_title_pure = wp_class_title.text.strip()
             else:
                 page_title_pure = "Tidak ditemukan"
+                
+            # Ekstrak H1 Tag
+            h1_tag = soup.find('h1')
+            h1_text = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
             
+            # Ekstrak Meta Description
             meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
             meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
             
+            # Ekstrak Image Alt Tag
             images = soup.find_all('img')
             alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
             alt_combined = " ; ".join(alts) if alts else "Kosong"
@@ -90,6 +99,7 @@ def crawl_pages(start_url, max_pages, delay_seconds):
                 "Type": "Page",
                 "Page Title (WP)": page_title_pure,
                 "Title Tag": seo_title,
+                "H1 Tag": h1_text,
                 "Meta Description": meta_description,
                 "Permalink": current_url,
                 "Image Alt Tag": alt_combined
@@ -103,6 +113,7 @@ def crawl_pages(start_url, max_pages, delay_seconds):
                 "Type": "Page (Timeout/Error)",
                 "Page Title (WP)": f"Error: {str(e)[:50]}",
                 "Title Tag": "Gagal Diakses",
+                "H1 Tag": "Gagal Diakses",
                 "Meta Description": "Gagal Diakses",
                 "Permalink": current_url,
                 "Image Alt Tag": "Gagal Diakses"
@@ -155,9 +166,11 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                 if page_resp.status_code == 200:
                     soup = BeautifulSoup(page_resp.text, 'html.parser')
                     
+                    # Ekstrak Title Tag (SEO)
                     title = soup.find('title')
                     seo_title = title.text.strip() if title else "Tidak ada Title Tag"
                     
+                    # Ekstrak Page Title (WP Class / OG)
                     og_title = soup.find('meta', attrs={'property': 'og:title'})
                     wp_class_title = soup.find(class_=['product_title', 'entry-title'])
                     
@@ -167,10 +180,16 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                         page_title_pure = wp_class_title.text.strip()
                     else:
                         page_title_pure = "Tidak ditemukan"
+                        
+                    # Ekstrak H1 Tag
+                    h1_tag = soup.find('h1')
+                    h1_text = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
                     
+                    # Ekstrak Meta Description
                     meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
                     meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
                     
+                    # Ekstrak Image Alt Tag
                     images = soup.find_all('img')
                     alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
                     alt_combined = " ; ".join(alts) if alts else "Kosong"
@@ -179,6 +198,7 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                         "Type": "Product",
                         "Page Title (WP)": page_title_pure,
                         "Title Tag": seo_title,
+                        "H1 Tag": h1_text,
                         "Meta Description": meta_description,
                         "Permalink": current_url,
                         "Image Alt Tag": alt_combined
@@ -190,6 +210,7 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                         "Type": f"Product (Error {page_resp.status_code})",
                         "Page Title (WP)": "Gagal Diakses",
                         "Title Tag": "Gagal Diakses",
+                        "H1 Tag": "Gagal Diakses",
                         "Meta Description": "Gagal Diakses",
                         "Permalink": current_url,
                         "Image Alt Tag": "Gagal Diakses"
@@ -201,6 +222,7 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                     "Type": "Product (Timeout/Error)",
                     "Page Title (WP)": f"Error: {str(e)[:50]}",
                     "Title Tag": "Gagal Diakses",
+                    "H1 Tag": "Gagal Diakses",
                     "Meta Description": "Gagal Diakses",
                     "Permalink": current_url,
                     "Image Alt Tag": "Gagal Diakses"
@@ -220,9 +242,9 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
 # ==========================================
 # KONFIGURASI DASHBOARD (STREAMLIT UI)
 # ==========================================
-st.set_page_config(page_title="SEO & Image Alt Scanner v4.3", layout="wide")
-st.title("🚀 Dashboard SEO & Image Alt Scanner v4.3")
-st.write("Tools audit *On-Page SEO* dengan fitur pencatatan URL Error (Mencegah selisih data Sitemap).")
+st.set_page_config(page_title="SEO & Image Alt Scanner v4.4", layout="wide")
+st.title("🚀 Dashboard SEO & Image Alt Scanner v4.4")
+st.write("Tools audit *On-Page SEO* dengan penambahan kolom tag H1 serta pencatatan URL Error.")
 
 scan_mode = st.radio(
     "Pilih Metode Scanning:",
