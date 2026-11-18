@@ -1,4 +1,4 @@
-# version 4.4
+# version 4.7
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -9,7 +9,7 @@ import csv
 import re
 
 # ==========================================
-# FUNGSI METODE 1: CRAWLING (UNTUK PAGE)
+# FUNGSI METODE 1: CRAWLING (UNTUK PAGE/ALL)
 # ==========================================
 def get_internal_links(base_url, soup):
     internal_links = set()
@@ -23,7 +23,10 @@ def get_internal_links(base_url, soup):
                 internal_links.add(full_url)
     return internal_links
 
-def crawl_pages(start_url, max_pages, delay_seconds):
+def crawl_pages(start_url, max_pages, delay_seconds, allowed_keywords_str):
+    # Memecah kata kunci menjadi list (contoh: ["/rolex/", "/collection/"])
+    keywords = [k.strip() for k in allowed_keywords_str.split(',') if k.strip()]
+    
     visited = set()
     queue = [start_url]
     results = []
@@ -48,11 +51,11 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             if response.status_code != 200:
                 results.append({
                     "Type": f"Page (Error {response.status_code})",
+                    "URL": current_url,
                     "Page Title (WP)": "Gagal Diakses",
                     "Title Tag": "Gagal Diakses",
                     "H1 Tag": "Gagal Diakses",
                     "Meta Description": "Gagal Diakses",
-                    "Permalink": current_url,
                     "Image Alt Tag": "Gagal Diakses"
                 })
                 progress_bar.progress(min(int((len(visited) / max_pages) * 100), 100))
@@ -60,12 +63,13 @@ def crawl_pages(start_url, max_pages, delay_seconds):
                 
             soup = BeautifulSoup(response.text, 'html.parser')
             
+            # LOGIKA BARU: Filter link berdasarkan kata kunci
             for link in get_internal_links(current_url, soup):
-                if link.startswith(start_url) and link not in visited and link not in queue:
+                # Izinkan jika URL mengandung salah satu kata kunci, ATAU jika kata kunci dikosongkan (ambil semua)
+                is_allowed = (not keywords) or any(kw in link for kw in keywords)
+                
+                if is_allowed and link not in visited and link not in queue:
                     queue.append(link)
-            
-            if "/rolex/jam-tangan-rolex/" in current_url and len(current_url.split('/')) > 6:
-                continue
                 
             # Ekstrak Title Tag (SEO)
             title = soup.find('title')
@@ -96,12 +100,12 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             alt_combined = " ; ".join(alts) if alts else "Kosong"
             
             results.append({
-                "Type": "Page",
+                "Type": "Page/Scanned",
+                "URL": current_url,
                 "Page Title (WP)": page_title_pure,
                 "Title Tag": seo_title,
                 "H1 Tag": h1_text,
                 "Meta Description": meta_description,
-                "Permalink": current_url,
                 "Image Alt Tag": alt_combined
             })
             
@@ -111,11 +115,11 @@ def crawl_pages(start_url, max_pages, delay_seconds):
             visited.add(current_url)
             results.append({
                 "Type": "Page (Timeout/Error)",
+                "URL": current_url,
                 "Page Title (WP)": f"Error: {str(e)[:50]}",
                 "Title Tag": "Gagal Diakses",
                 "H1 Tag": "Gagal Diakses",
                 "Meta Description": "Gagal Diakses",
-                "Permalink": current_url,
                 "Image Alt Tag": "Gagal Diakses"
             })
             progress_bar.progress(min(int((len(visited) / max_pages) * 100), 100))
@@ -166,11 +170,9 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                 if page_resp.status_code == 200:
                     soup = BeautifulSoup(page_resp.text, 'html.parser')
                     
-                    # Ekstrak Title Tag (SEO)
                     title = soup.find('title')
                     seo_title = title.text.strip() if title else "Tidak ada Title Tag"
                     
-                    # Ekstrak Page Title (WP Class / OG)
                     og_title = soup.find('meta', attrs={'property': 'og:title'})
                     wp_class_title = soup.find(class_=['product_title', 'entry-title'])
                     
@@ -181,50 +183,45 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
                     else:
                         page_title_pure = "Tidak ditemukan"
                         
-                    # Ekstrak H1 Tag
                     h1_tag = soup.find('h1')
                     h1_text = h1_tag.text.strip() if h1_tag else "Tidak ada H1"
                     
-                    # Ekstrak Meta Description
                     meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
                     meta_description = meta_desc.get('content', '').strip() if meta_desc else "Kosong"
                     
-                    # Ekstrak Image Alt Tag
                     images = soup.find_all('img')
                     alts = [img.get('alt', '').strip() for img in images if img.get('alt', '').strip()]
                     alt_combined = " ; ".join(alts) if alts else "Kosong"
                     
                     results.append({
                         "Type": "Product",
+                        "URL": current_url,
                         "Page Title (WP)": page_title_pure,
                         "Title Tag": seo_title,
                         "H1 Tag": h1_text,
                         "Meta Description": meta_description,
-                        "Permalink": current_url,
                         "Image Alt Tag": alt_combined
                     })
                 
-                # JIKA STATUS CODE SELAIN 200 (Misal: 404, 301, 500)
                 else:
                     results.append({
                         "Type": f"Product (Error {page_resp.status_code})",
+                        "URL": current_url,
                         "Page Title (WP)": "Gagal Diakses",
                         "Title Tag": "Gagal Diakses",
                         "H1 Tag": "Gagal Diakses",
                         "Meta Description": "Gagal Diakses",
-                        "Permalink": current_url,
                         "Image Alt Tag": "Gagal Diakses"
                     })
                     
-            # JIKA TERJADI TIMEOUT ATAU ERROR KONEKSI
             except Exception as e:
                 results.append({
                     "Type": "Product (Timeout/Error)",
+                    "URL": current_url,
                     "Page Title (WP)": f"Error: {str(e)[:50]}",
                     "Title Tag": "Gagal Diakses",
                     "H1 Tag": "Gagal Diakses",
                     "Meta Description": "Gagal Diakses",
-                    "Permalink": current_url,
                     "Image Alt Tag": "Gagal Diakses"
                 })
                 
@@ -242,13 +239,13 @@ def scan_from_sitemap(sitemap_url, target_prefix, max_pages, delay_seconds):
 # ==========================================
 # KONFIGURASI DASHBOARD (STREAMLIT UI)
 # ==========================================
-st.set_page_config(page_title="SEO & Image Alt Scanner v4.4", layout="wide")
-st.title("🚀 Dashboard SEO & Image Alt Scanner v4.4")
-st.write("Tools audit *On-Page SEO* dengan penambahan kolom tag H1 serta pencatatan URL Error.")
+st.set_page_config(page_title="SEO & Image Alt Scanner v4.7", layout="wide")
+st.title("🚀 Dashboard SEO & Image Alt Scanner v4.7")
+st.write("Tools audit *On-Page SEO* dengan filter *Keyword URL* cerdas (Mendukung URL lintas *Taxonomy/Archive*).")
 
 scan_mode = st.radio(
     "Pilih Metode Scanning:",
-    ("Metode Crawling (Cocok untuk Halaman/Page Umum)", "Metode Sitemap XML (Akurat untuk Ratusan Produk)"),
+    ("Metode Crawling (Ambil Semua Halaman & Turunan)", "Metode Sitemap XML (Akurat untuk Ratusan Produk)"),
     horizontal=True
 )
 
@@ -262,7 +259,11 @@ with st.form("scan_form"):
         with col2:
             target_prefix = st.text_input("Syarat Awalan URL (Prefix)", value="https://www.intime.co.id/rolex/jam-tangan-rolex/")
     else:
-        url_input = st.text_input("Masukkan Target URL / Halaman Awal", value="https://www.intime.co.id/rolex/")
+        col1, col2 = st.columns([2, 2])
+        with col1:
+            url_input = st.text_input("Masukkan Target URL / Halaman Awal", value="https://www.intime.co.id/rolex/jam-tangan-rolex/")
+        with col2:
+            allowed_keywords = st.text_input("Filter: URL Turunan Wajib Mengandung Kata (Pisahkan dengan koma)", value="/rolex/, /collection/", help="Kosongkan jika ingin mengambil SEMUA link yang ada di website (Tidak Disarankan)")
 
     col3, col4 = st.columns([2, 2])
     with col3:
@@ -278,8 +279,8 @@ if submit_button:
             data = scan_from_sitemap(sitemap_url, target_prefix, int(max_pages), float(delay))
             file_name = 'hasil_audit_produk_sitemap.csv'
         else:
-            data = crawl_pages(url_input, int(max_pages), float(delay))
-            file_name = 'hasil_audit_page_crawling.csv'
+            data = crawl_pages(url_input, int(max_pages), float(delay), allowed_keywords)
+            file_name = 'hasil_audit_crawling_bebas.csv'
         
         if data:
             df = pd.DataFrame(data)
